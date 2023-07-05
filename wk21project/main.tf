@@ -1,17 +1,11 @@
-provider "aws" {
-  region = "us-east-1"
+resource "aws_s3_bucket" "remote_backend" {
+  bucket = var.bucket_name
+  tags   = var.bucket_tags
 }
 
-resource "aws_s3_bucket" "remote-backend-jreid" {
-  bucket = "remote-backend-jreid"
-  tags = {
-    Name        = "remote_backend"
-    Environment = "Dev"
-  }
-}
+resource "aws_s3_bucket_versioning" "versioning_remote_backend" {
+  bucket = aws_s3_bucket.remote_backend.id
 
-resource "aws_s3_bucket_versioning" "versioning_remote-backend-jreid" {
-  bucket = aws_s3_bucket.remote-backend-jreid.id
   versioning_configuration {
     status = "Enabled"
   }
@@ -20,65 +14,60 @@ resource "aws_s3_bucket_versioning" "versioning_remote-backend-jreid" {
 data "terraform_remote_state" "remote_state" {
   backend = "s3"
   config = {
-    bucket = aws_s3_bucket.remote-backend-jreid.bucket
+    bucket = aws_s3_bucket.remote_backend.bucket
     key    = "terraform.tfstate"
-    region = "us-east-1"
+    region = var.region
   }
 }
 
 resource "aws_security_group" "week21_sg" {
-  name        = "week21_sg"
+  name        = var.security_group_name
   description = "Allow all incoming traffic"
-  vpc_id      = "vpc-00821b9cce139e7b8"
+  vpc_id      = var.vpc_id
 
   ingress {
-    from_port   = 80
-    to_port     = 80
+    from_port   = var.ingress_ports[0]
+    to_port     = var.ingress_ports[0]
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = var.ingress_cidr_blocks
   }
 
   ingress {
-    from_port   = 443
-    to_port     = 443
+    from_port   = var.ingress_ports[1]
+    to_port     = var.ingress_ports[1]
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = var.ingress_cidr_blocks
   }
 
   ingress {
-    from_port   = 22
-    to_port     = 22
+    from_port   = var.ingress_ports[2]
+    to_port     = var.ingress_ports[2]
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = var.ingress_cidr_blocks
   }
-  
-   egress {
-    from_port        = 0
-    to_port          = 0
-    protocol         = "-1"
-    cidr_blocks      = ["0.0.0.0/0"]
+
+  egress {
+    from_port   = var.egress_ports[0]
+    to_port     = var.egress_ports[0]
+    protocol    = "-1"
+    cidr_blocks = var.egress_cidr_blocks
   }
 }
 
-# data "template_file" "user_data" {
-#   template = file("script.sh")
-# }
-
 resource "aws_launch_template" "week21_lt" {
-  name_prefix   = "week21_lt"
-  image_id      = "ami-053b0d53c279acc90"
-  instance_type = "t2.micro"
-  vpc_security_group_ids = [aws_security_group.week21_sg.id]
-  
-  user_data = filebase64("script.sh")
+  name_prefix             = var.launch_template_name_prefix
+  image_id                = var.image_id
+  instance_type           = var.instance_type
+  vpc_security_group_ids  = [aws_security_group.week21_sg.id]
+  user_data               = filebase64("script.sh")
 }
 
 resource "aws_autoscaling_group" "week21_asg" {
-  name                = "week21_asg"
-  min_size            = 2
-  max_size            = 5
-  desired_capacity    = 2
-  availability_zones  = ["us-east-1a", "us-east-1b"]
+  name                 = var.autoscaling_group_name
+  min_size             = var.min_size
+  max_size             = var.max_size
+  desired_capacity     = var.desired_capacity
+  availability_zones   = var.availability_zones
 
   launch_template {
     id      = aws_launch_template.week21_lt.id
